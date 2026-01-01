@@ -72,13 +72,6 @@ with st.expander("🔍 Filters", expanded=True):
             default=sorted(df["user_type"].dropna().unique())
         )
 
-    with col6:
-        total_in_out_filter = st.multiselect(
-            "Total In / Out",
-            options=sorted(df["total_in_out"].dropna().unique()),
-            default=sorted(df["total_in_out"].dropna().unique())
-        )
-
 # ---------------- APPLY FILTERS ----------------
 if search:
     df = df[
@@ -92,7 +85,6 @@ df = df[
     & (df["day_status"].isin(day_status_filter))
     & (df["leave_status"].isin(leave_status_filter))
     & (df["user_type"].isin(user_type_filter))
-    & (df["total_in_out"].isin(total_in_out_filter))
 ]
 
 # ---------------- WORK HOURS STATUS (FAST VISUAL TRICK) ----------------
@@ -142,3 +134,4 @@ st.download_button(
     "attendance_filtered.csv",
     "text/csv"
 )
+
