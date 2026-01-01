@@ -1,13 +1,17 @@
 import streamlit as st
 import pandas as pd
+from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
 
+# ---------------- PAGE CONFIG ----------------
 st.set_page_config(page_title="Attendance Dashboard", layout="wide")
 
+# ---------------- CONSTANTS ----------------
 SHEET_ID = "1FVjiK9Y-AhrogECD6Q8tRZpPiSxOFMevlMKGQWTGsHI"
 SHEET_NAME = "odata"
 
 CSV_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={SHEET_NAME}"
 
+# ---------------- LOAD DATA ----------------
 @st.cache_data(ttl=600)
 def load_data():
     df = pd.read_csv(CSV_URL)
@@ -18,51 +22,71 @@ df = load_data()
 
 st.title("📊 Attendance Dashboard")
 
-# ---------------- FILTERS ----------------
-c1, c2 = st.columns(2)
+# ---------------- AGGRID CONFIG ----------------
+gb = GridOptionsBuilder.from_dataframe(df)
 
-with c1:
-    search = st.text_input("🔍 Search (Emp ID / Name)")
+# Default column behavior
+gb.configure_default_column(
+    filter=True,
+    sortable=True,
+    resizable=True,
+    floatingFilter=True   # 👈 Excel-like filter bar
+)
 
-with c2:
-    start, end = st.date_input(
-        "📅 Date Range",
-        [df["log_date"].min(), df["log_date"].max()]
+# Enable SET FILTER (multi-select dropdown) for specific columns
+set_filter_cols = ["day_status", "leave_status", "employee_fname", "empid"]
+
+for col in set_filter_cols:
+    if col in df.columns:
+        gb.configure_column(
+            col,
+            filter="agSetColumnFilter",
+            filterParams={
+                "applyMiniFilterWhileTyping": True,
+                "debounceMs": 200,
+                "buttons": ["reset", "apply"]
+            }
+        )
+
+# Date filter
+if "log_date" in df.columns:
+    gb.configure_column(
+        "log_date",
+        filter="agDateColumnFilter",
+        filterParams={
+            "browserDatePicker": True
+        }
     )
 
-if search:
-    df = df[
-        df["employee_fname"].str.contains(search, case=False, na=False)
-        | df["empid"].astype(str).str.contains(search)
-    ]
+# Pagination
+gb.configure_pagination(paginationAutoPageSize=True)
 
-df = df[
-    (df["log_date"] >= pd.to_datetime(start))
-    & (df["log_date"] <= pd.to_datetime(end))
-]
-
-# ---------------- STATUS INDICATOR ----------------
-def status_icon(row):
-    if row["leave_status"] == "YES":
-        return "🔴 Leave"
-    if row["day_status"] == "Full Day":
-        return "🟢 Full"
-    if row["day_status"] == "Half Day":
-        return "🟡 Half"
-    if row["day_status"] == "Miss Punch":
-        return "🔴 Miss"
-    return ""
-
-df.insert(0, "Status", df.apply(status_icon, axis=1))
+# Row highlighting
+gb.configure_grid_options(
+    getRowStyle="""
+    function(params) {
+        if (params.data.leave_status === 'YES') {
+            return { backgroundColor: '#ffd6d6' };
+        }
+        if (params.data.day_status === 'Full Day') {
+            return { backgroundColor: '#d4f7d4' };
+        }
+        if (params.data.day_status === 'Half Day') {
+            return { backgroundColor: '#fff3cd' };
+        }
+        if (params.data.day_status === 'Miss Punch') {
+            return { backgroundColor: '#f8d7da' };
+        }
+    }
+    """
+)
 
 # ---------------- TABLE ----------------
-st.subheader("📋 Attendance Table (Fast)")
-st.dataframe(df, use_container_width=True, height=520)
-
-# ---------------- DOWNLOAD ----------------
-st.download_button(
-    "⬇ Download CSV",
-    df.to_csv(index=False),
-    "attendance_report.csv",
-    "text/csv"
+AgGrid(
+    df,
+    gridOptions=gb.build(),
+    update_mode=GridUpdateMode.NO_UPDATE,
+    height=600,
+    allow_unsafe_jscode=True,
+    theme="balham"
 )
