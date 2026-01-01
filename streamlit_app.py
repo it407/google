@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import json
 from google.oauth2.service_account import Credentials
 import gspread
 from st_aggrid import AgGrid, GridOptionsBuilder
@@ -18,9 +19,9 @@ SHEET_NAME = "odata"
 # ---------------- LOAD DATA ----------------
 @st.cache_data(ttl=300)
 def load_data():
-    # 🔐 Streamlit Secrets based credentials
+    # 🔐 Credentials from Streamlit Secrets (RAW JSON)
     creds = Credentials.from_service_account_info(
-        st.secrets["gcp_service_account"],
+        json.loads(st.secrets["GOOGLE_CREDS"]),
         scopes=["https://www.googleapis.com/auth/spreadsheets.readonly"]
     )
 
@@ -38,7 +39,7 @@ def load_data():
 
     return df
 
-# ---------------- LOAD DF ----------------
+# ---------------- LOAD DATAFRAME ----------------
 df = load_data()
 
 st.title("📊 Attendance Report")
