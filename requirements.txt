@@ -1,0 +1,10 @@
+streamlit
+streamlit-aggrid
+pandas
+gspread
+google-auth
+plotly
+openpyxl
+xlsxwriter
+pyarrow
+
