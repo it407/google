@@ -17,8 +17,10 @@ CSV_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:cs
 @st.cache_data(ttl=600)
 def load_data():
     df = pd.read_csv(CSV_URL)
+
     df["log_date"] = pd.to_datetime(df["log_date"], errors="coerce")
     df["work_hours"] = pd.to_numeric(df["work_hours"], errors="coerce")
+
     return df
 
 df = load_data()
@@ -28,7 +30,8 @@ st.title("📊 Attendance Dashboard")
 # ---------------- FILTERS (MOBILE FRIENDLY) ----------------
 with st.expander("🔍 Filters", expanded=True):
 
-    search = st.text_input("Search (Employee Name / Emp ID)")
+    # Search by Emp ID / First Name
+    search = st.text_input("Search (Emp ID / First Name)")
 
     col1, col2 = st.columns(2)
 
@@ -44,11 +47,37 @@ with st.expander("🔍 Filters", expanded=True):
             df["log_date"].max()
         )
 
-    status_filter = st.multiselect(
-        "Day Status",
-        options=sorted(df["day_status"].dropna().unique()),
-        default=sorted(df["day_status"].dropna().unique())
-    )
+    col3, col4 = st.columns(2)
+
+    with col3:
+        day_status_filter = st.multiselect(
+            "Day Status",
+            options=sorted(df["day_status"].dropna().unique()),
+            default=sorted(df["day_status"].dropna().unique())
+        )
+
+    with col4:
+        leave_status_filter = st.multiselect(
+            "Leave Status",
+            options=sorted(df["leave_status"].dropna().unique()),
+            default=sorted(df["leave_status"].dropna().unique())
+        )
+
+    col5, col6 = st.columns(2)
+
+    with col5:
+        user_type_filter = st.multiselect(
+            "User Type",
+            options=sorted(df["user_type"].dropna().unique()),
+            default=sorted(df["user_type"].dropna().unique())
+        )
+
+    with col6:
+        total_in_out_filter = st.multiselect(
+            "Total In / Out",
+            options=sorted(df["total_in_out"].dropna().unique()),
+            default=sorted(df["total_in_out"].dropna().unique())
+        )
 
 # ---------------- APPLY FILTERS ----------------
 if search:
@@ -60,11 +89,14 @@ if search:
 df = df[
     (df["log_date"] >= pd.to_datetime(start_date))
     & (df["log_date"] <= pd.to_datetime(end_date))
-    & (df["day_status"].isin(status_filter))
+    & (df["day_status"].isin(day_status_filter))
+    & (df["leave_status"].isin(leave_status_filter))
+    & (df["user_type"].isin(user_type_filter))
+    & (df["total_in_out"].isin(total_in_out_filter))
 ]
 
-# ---------------- WORK HOURS STATUS (FAST COLOR TRICK) ----------------
-def hours_status(hours):
+# ---------------- WORK HOURS STATUS (FAST VISUAL TRICK) ----------------
+def work_hour_status(hours):
     if pd.isna(hours):
         return "⚪ NA"
     if hours >= 8:
@@ -73,26 +105,32 @@ def hours_status(hours):
         return "🟡 Partial"
     return "🔴 Low"
 
-df["Work Hours Status"] = df["work_hours"].apply(hours_status)
+df["Work Hours Status"] = df["work_hours"].apply(work_hour_status)
 
-# ---------------- CLEAN COLUMN ORDER ----------------
-display_cols = [
+# ---------------- COLUMN ORDER ----------------
+display_columns = [
     "empid",
     "employee_fname",
+    "employee_lname",
+    "gender",
     "log_date",
-    "day_status",
+    "user_type",
+    "first_in_time",
+    "last_out_time",
     "work_hours",
     "Work Hours Status",
+    "day_status",
+    "total_in_out",
     "leave_status"
 ]
 
-display_cols = [c for c in display_cols if c in df.columns]
+display_columns = [c for c in display_columns if c in df.columns]
 
 # ---------------- TABLE ----------------
 st.subheader("📋 Attendance Records")
 
 st.dataframe(
-    df[display_cols],
+    df[display_columns],
     use_container_width=True,
     height=520
 )
@@ -100,7 +138,7 @@ st.dataframe(
 # ---------------- CSV DOWNLOAD ----------------
 st.download_button(
     "⬇ Download Filtered CSV",
-    df[display_cols].to_csv(index=False),
+    df[display_columns].to_csv(index=False),
     "attendance_filtered.csv",
     "text/csv"
 )
