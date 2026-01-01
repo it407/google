@@ -14,13 +14,13 @@ st.set_page_config(
 # ---------------- CONSTANTS ----------------
 SHEET_ID = "1FVjiK9Y-AhrogECD6Q8tRZpPiSxOFMevlMKGQWTGsHI"
 SHEET_NAME = "odata"
-SERVICE_ACCOUNT_FILE = "zoffit.json"
 
 # ---------------- LOAD DATA ----------------
 @st.cache_data(ttl=300)
 def load_data():
-    creds = Credentials.from_service_account_file(
-        SERVICE_ACCOUNT_FILE,
+    # 🔐 Streamlit Secrets based credentials
+    creds = Credentials.from_service_account_info(
+        st.secrets["gcp_service_account"],
         scopes=["https://www.googleapis.com/auth/spreadsheets.readonly"]
     )
 
@@ -38,6 +38,7 @@ def load_data():
 
     return df
 
+# ---------------- LOAD DF ----------------
 df = load_data()
 
 st.title("📊 Attendance Report")
