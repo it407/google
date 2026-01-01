@@ -1,9 +1,11 @@
 import streamlit as st
 import pandas as pd
-from st_aggrid import AgGrid, GridOptionsBuilder
 
 # ---------------- PAGE CONFIG ----------------
-st.set_page_config(page_title="Attendance Dashboard", layout="wide")
+st.set_page_config(
+    page_title="Attendance Dashboard",
+    layout="wide"
+)
 
 # ---------------- GOOGLE SHEET (PUBLIC) ----------------
 SHEET_ID = "1FVjiK9Y-AhrogECD6Q8tRZpPiSxOFMevlMKGQWTGsHI"
@@ -16,82 +18,89 @@ CSV_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:cs
 def load_data():
     df = pd.read_csv(CSV_URL)
     df["log_date"] = pd.to_datetime(df["log_date"], errors="coerce")
+    df["work_hours"] = pd.to_numeric(df["work_hours"], errors="coerce")
     return df
 
 df = load_data()
 
 st.title("📊 Attendance Dashboard")
 
-# ---------------- AGGRID CONFIG ----------------
-gb = GridOptionsBuilder.from_dataframe(df)
+# ---------------- FILTERS (MOBILE FRIENDLY) ----------------
+with st.expander("🔍 Filters", expanded=True):
 
-gb.configure_default_column(
-    filter=True,
-    sortable=True,
-    resizable=True,
-    floatingFilter=True
-)
+    search = st.text_input("Search (Employee Name / Emp ID)")
 
-# Multi-select dropdown filters
-set_filter_cols = ["day_status", "leave_status", "employee_fname", "empid"]
+    col1, col2 = st.columns(2)
 
-for col in set_filter_cols:
-    if col in df.columns:
-        gb.configure_column(
-            col,
-            filter="agSetColumnFilter",
-            filterParams={
-                "applyMiniFilterWhileTyping": True,
-                "buttons": ["reset", "apply"]
-            }
+    with col1:
+        start_date = st.date_input(
+            "Start Date",
+            df["log_date"].min()
         )
 
-# Date filter
-if "log_date" in df.columns:
-    gb.configure_column(
-        "log_date",
-        filter="agDateColumnFilter",
-        filterParams={"browserDatePicker": True}
+    with col2:
+        end_date = st.date_input(
+            "End Date",
+            df["log_date"].max()
+        )
+
+    status_filter = st.multiselect(
+        "Day Status",
+        options=sorted(df["day_status"].dropna().unique()),
+        default=sorted(df["day_status"].dropna().unique())
     )
 
-# Cell-level color highlights (SAFE)
-gb.configure_column(
+# ---------------- APPLY FILTERS ----------------
+if search:
+    df = df[
+        df["employee_fname"].str.contains(search, case=False, na=False)
+        | df["empid"].astype(str).str.contains(search)
+    ]
+
+df = df[
+    (df["log_date"] >= pd.to_datetime(start_date))
+    & (df["log_date"] <= pd.to_datetime(end_date))
+    & (df["day_status"].isin(status_filter))
+]
+
+# ---------------- WORK HOURS STATUS (FAST COLOR TRICK) ----------------
+def hours_status(hours):
+    if pd.isna(hours):
+        return "⚪ NA"
+    if hours >= 8:
+        return "🟢 Full"
+    if hours >= 4:
+        return "🟡 Partial"
+    return "🔴 Low"
+
+df["Work Hours Status"] = df["work_hours"].apply(hours_status)
+
+# ---------------- CLEAN COLUMN ORDER ----------------
+display_cols = [
+    "empid",
+    "employee_fname",
+    "log_date",
     "day_status",
-    cellStyle={
-        "styleConditions": [
-            {"condition": "value == 'Full Day'", "style": {"backgroundColor": "#d4f7d4"}},
-            {"condition": "value == 'Half Day'", "style": {"backgroundColor": "#fff3cd"}},
-            {"condition": "value == 'Miss Punch'", "style": {"backgroundColor": "#f8d7da"}},
-        ]
-    }
+    "work_hours",
+    "Work Hours Status",
+    "leave_status"
+]
+
+display_cols = [c for c in display_cols if c in df.columns]
+
+# ---------------- TABLE ----------------
+st.subheader("📋 Attendance Records")
+
+st.dataframe(
+    df[display_cols],
+    use_container_width=True,
+    height=520
 )
 
-gb.configure_column(
-    "leave_status",
-    cellStyle={
-        "styleConditions": [
-            {"condition": "value == 'YES'", "style": {"backgroundColor": "#ffd6d6"}}
-        ]
-    }
-)
-
-gb.configure_pagination(paginationAutoPageSize=True)
-
-# ---------------- RENDER GRID ----------------
-grid_response = AgGrid(
-    df,
-    gridOptions=gb.build(),
-    height=600,
-    theme="balham",
-    fit_columns_on_grid_load=True
-)
-
-# ---------------- CSV DOWNLOAD (FILTERED DATA) ----------------
-filtered_df = pd.DataFrame(grid_response["data"])
-
+# ---------------- CSV DOWNLOAD ----------------
 st.download_button(
-    label="⬇ Download Filtered CSV",
-    data=filtered_df.to_csv(index=False).encode("utf-8"),
-    file_name="attendance_filtered.csv",
-    mime="text/csv"
+    "⬇ Download Filtered CSV",
+    df[display_cols].to_csv(index=False),
+    "attendance_filtered.csv",
+    "text/csv"
 )
