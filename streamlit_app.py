@@ -19,6 +19,7 @@ def load_data():
     df = pd.read_csv(CSV_URL)
 
     df["log_date"] = pd.to_datetime(df["log_date"], errors="coerce")
+    df["log_date"] = df["log_date"].dt.date
     df["work_hours"] = pd.to_numeric(df["work_hours"], errors="coerce")
 
     return df
@@ -134,4 +135,5 @@ st.download_button(
     "attendance_filtered.csv",
     "text/csv"
 )
+
 
