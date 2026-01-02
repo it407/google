@@ -4,6 +4,36 @@ import pandas as pd
 # ---------------- PAGE CONFIG ----------------
 st.set_page_config(page_title="Attendance Dashboard", layout="wide")
 
+# ---- Hide GitHub / Fork menu and footer ONLY ----
+st.markdown("""
+<style>
+
+/* Remove extra top spacing */
+.block-container {
+    padding-top: 1rem;
+}
+
+/* Hide top-right toolbar (GitHub, Fork, Deploy) */
+header [data-testid="stToolbar"] {
+    display: none;
+}
+
+/* Hide bottom-right Share floating button */
+a[href*="share.streamlit"] {
+    display: none !important;
+}
+[data-testid="stShareButton"] {
+    display: none !important;
+}
+
+/* Hide footer */
+footer {
+    visibility: hidden;
+}
+
+</style>
+""", unsafe_allow_html=True)
+
 # ---------------- GOOGLE SHEET (PUBLIC) ----------------
 SHEET_ID = "1FVjiK9Y-AhrogECD6Q8tRZpPiSxOFMevlMKGQWTGsHI"
 SHEET_NAME = "odata"
