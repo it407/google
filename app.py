@@ -23,27 +23,51 @@ if "logged_in" not in st.session_state:
 
 # ================= GOOGLE SHEET CONFIG =================
 SHEET_ID = "1FVjiK9Y-AhrogECD6Q8tRZpPiSxOFMevlMKGQWTGsHI"
-
 ATT_SHEET = "odata"
 ACCESS_SHEET = "user_access_master"
 
 ATT_CSV_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={ATT_SHEET}"
 ACCESS_CSV_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={ACCESS_SHEET}"
 
-# ================= LOAD USERS =================
+# ================= LOAD USERS (BULLETPROOF) =================
 @st.cache_data(ttl=600)
 def load_users():
     df = pd.read_csv(ACCESS_CSV_URL)
 
-    # normalize headers
-    df.columns = df.columns.str.strip().str.lower()
+    # Case 1: Entire header collapsed into one column
+    if len(df.columns) == 1:
+        df = df.iloc[:, 0].astype(str).str.split(r"\s+", expand=True)
+        df.columns = ["user_id", "employee_id", "username", "password", "role", "is_active"]
 
-    # map username column
-    if "username" not in df.columns:
-        raise Exception("username column missing in user_access_master")
+    # Normalize headers
+    df.columns = (
+        df.columns.astype(str)
+        .str.strip()
+        .str.lower()
+        .str.replace(" ", "")
+    )
 
-    # active flag
-    df["is_active"] = df["is_active"].astype(str).str.upper() == "TRUE"
+    # Standardize column names
+    rename_map = {
+        "userid": "user_id",
+        "employeeid": "employee_id",
+        "username": "username",
+        "password": "password",
+        "role": "role",
+        "isactive": "is_active",
+        "active": "is_active"
+    }
+    df = df.rename(columns=rename_map)
+
+    required = {"username", "password", "employee_id", "role"}
+    if not required.issubset(df.columns):
+        raise Exception(f"Missing columns: {required - set(df.columns)}")
+
+    # Active flag
+    if "is_active" in df.columns:
+        df["is_active"] = df["is_active"].astype(str).str.upper() == "TRUE"
+    else:
+        df["is_active"] = True
 
     return df
 
