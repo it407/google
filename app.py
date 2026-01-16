@@ -1,10 +1,10 @@
 import streamlit as st
 import pandas as pd
 
-# ---------------- PAGE CONFIG ----------------
+# ================= PAGE CONFIG =================
 st.set_page_config(page_title="Attendance Dashboard", layout="wide")
 
-# ---------------- UI CLEANUP ----------------
+# ================= UI CLEAN =================
 st.markdown("""
 <style>
 .block-container { padding-top: 1rem; }
@@ -15,13 +15,13 @@ footer { visibility: hidden; }
 </style>
 """, unsafe_allow_html=True)
 
-# ---------------- SESSION INIT ----------------
+# ================= SESSION INIT =================
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
     st.session_state.employee_id = None
     st.session_state.role = None
 
-# ---------------- GOOGLE SHEET CONFIG ----------------
+# ================= GOOGLE SHEET CONFIG =================
 SHEET_ID = "1FVjiK9Y-AhrogECD6Q8tRZpPiSxOFMevlMKGQWTGsHI"
 
 ATT_SHEET = "odata"
@@ -30,48 +30,45 @@ ACCESS_SHEET = "user_access_master"
 ATT_CSV_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={ATT_SHEET}"
 ACCESS_CSV_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={ACCESS_SHEET}"
 
-# ---------------- LOAD USERS (SAFE) ----------------
+# ================= LOAD USERS =================
 @st.cache_data(ttl=600)
 def load_users():
     df = pd.read_csv(ACCESS_CSV_URL)
 
-    # Normalize headers
+    # normalize headers
     df.columns = df.columns.str.strip().str.lower()
 
-    # Normalize active flag
-    if "is_active" in df.columns:
-        df["is_active"] = df["is_active"].astype(str).str.upper() == "TRUE"
-    elif "active" in df.columns:
-        df["is_active"] = df["active"].astype(str).str.upper() == "TRUE"
-    else:
-        df["is_active"] = True  # fallback
+    # map username column
+    if "username" not in df.columns:
+        raise Exception("username column missing in user_access_master")
+
+    # active flag
+    df["is_active"] = df["is_active"].astype(str).str.upper() == "TRUE"
 
     return df
 
 users_df = load_users()
 
-# ---------------- LOAD ATTENDANCE ----------------
+# ================= LOAD ATTENDANCE =================
 @st.cache_data(ttl=600)
 def load_attendance():
     df = pd.read_csv(ATT_CSV_URL)
     df.columns = df.columns.str.strip().str.lower()
-
     df["log_date"] = pd.to_datetime(df["log_date"], errors="coerce")
     df["work_hours"] = pd.to_numeric(df["work_hours"], errors="coerce")
-
     return df
 
-# ---------------- LOGIN SCREEN ----------------
+# ================= LOGIN SCREEN =================
 def login_screen():
     st.title("🔐 Attendance Login")
 
-    email = st.text_input("Email")
+    username = st.text_input("Username")
     password = st.text_input("Password", type="password")
 
     if st.button("Login"):
         user = users_df[
-            (users_df["email"].str.lower() == email.lower()) &
-            (users_df["password"] == password) &
+            (users_df["username"].astype(str) == username) &
+            (users_df["password"].astype(str) == password) &
             (users_df["is_active"] == True)
         ]
 
@@ -81,41 +78,41 @@ def login_screen():
             st.session_state.logged_in = True
             st.session_state.employee_id = user.iloc[0]["employee_id"]
             st.session_state.role = user.iloc[0]["role"]
-            st.experimental_rerun()
+            st.rerun()
 
-# ---------------- LOGOUT ----------------
+# ================= LOGOUT =================
 def logout_sidebar():
     with st.sidebar:
         st.markdown(f"👤 **Role:** {st.session_state.role}")
-        st.markdown(f"🆔 **Employee:** {st.session_state.employee_id}")
+        st.markdown(f"🆔 **Employee ID:** {st.session_state.employee_id}")
         if st.button("🚪 Logout"):
             st.session_state.clear()
-            st.experimental_rerun()
+            st.rerun()
 
-# ---------------- ROLE FILTER ----------------
+# ================= ROLE FILTER =================
 def apply_role_filter(df):
     if st.session_state.role == "Admin":
         return df
     return df[df["empid"] == st.session_state.employee_id]
 
-# ---------------- AUTH GATE ----------------
+# ================= AUTH GATE =================
 if not st.session_state.logged_in:
     login_screen()
     st.stop()
 
 logout_sidebar()
 
-# ---------------- LOAD DATA ----------------
+# ================= LOAD DATA =================
 df = load_attendance()
 df = apply_role_filter(df)
 
 st.title("📊 Attendance Dashboard")
 
 if df.empty:
-    st.warning("No data found.")
+    st.warning("No data available.")
     st.stop()
 
-# ---------------- FILTERS ----------------
+# ================= FILTERS =================
 with st.expander("🔍 Filters", expanded=True):
     search = st.text_input("Search (Emp ID / First Name)")
 
@@ -145,7 +142,7 @@ with st.expander("🔍 Filters", expanded=True):
         sorted(df["user_type"].dropna().unique())
     )
 
-# ---------------- APPLY FILTERS ----------------
+# ================= APPLY FILTERS =================
 filtered = df.copy()
 
 if search:
@@ -165,7 +162,7 @@ filtered = filtered[
     (filtered["user_type"].isin(user_type_filter))
 ]
 
-# ---------------- WORK HOURS STATUS ----------------
+# ================= WORK HOURS STATUS =================
 def work_hour_status(hours):
     if pd.isna(hours):
         return "⚪ NA"
@@ -177,24 +174,22 @@ def work_hour_status(hours):
 
 filtered["work hours status"] = filtered["work_hours"].apply(work_hour_status)
 
-# ---------------- DISPLAY FORMAT ----------------
+# ================= DISPLAY =================
 display_df = filtered.copy()
 display_df["log_date"] = display_df["log_date"].dt.strftime("%Y-%m-%d")
 
-# ---------------- COLUMN ORDER ----------------
 display_columns = [
     "empid", "employee_fname", "employee_lname", "gender",
     "log_date", "user_type", "first_in_time", "last_out_time",
-    "work_hours", "work hours status", "day_status",
-    "total_in_out", "leave_status"
+    "work_hours", "work hours status",
+    "day_status", "total_in_out", "leave_status"
 ]
 display_columns = [c for c in display_columns if c in display_df.columns]
 
-# ---------------- TABLE ----------------
 st.subheader("📋 Attendance Records")
 st.dataframe(display_df[display_columns], use_container_width=True, height=520)
 
-# ---------------- DOWNLOAD ----------------
+# ================= DOWNLOAD =================
 st.download_button(
     "⬇ Download Filtered CSV",
     data=display_df[display_columns].to_csv(index=False).encode("utf-8"),
