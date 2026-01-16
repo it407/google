@@ -8,12 +8,9 @@ st.set_page_config(page_title="Attendance Dashboard", layout="wide")
 st.markdown("""
 <style>
 .block-container { padding-top: 1rem; }
-
 header [data-testid="stToolbar"] { display: none; }
-
 a[href*="share.streamlit"],
 [data-testid="stShareButton"] { display: none !important; }
-
 footer { visibility: hidden; }
 </style>
 """, unsafe_allow_html=True)
@@ -28,16 +25,27 @@ if "logged_in" not in st.session_state:
 SHEET_ID = "1FVjiK9Y-AhrogECD6Q8tRZpPiSxOFMevlMKGQWTGsHI"
 
 ATT_SHEET = "odata"
-ATT_CSV_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={ATT_SHEET}"
-
 ACCESS_SHEET = "user_access_master"
+
+ATT_CSV_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={ATT_SHEET}"
 ACCESS_CSV_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={ACCESS_SHEET}"
 
-# ---------------- LOAD USERS ----------------
+# ---------------- LOAD USERS (SAFE) ----------------
 @st.cache_data(ttl=600)
 def load_users():
     df = pd.read_csv(ACCESS_CSV_URL)
-    df["is_active"] = df["is_active"].astype(str).str.upper() == "TRUE"
+
+    # Normalize headers
+    df.columns = df.columns.str.strip().str.lower()
+
+    # Normalize active flag
+    if "is_active" in df.columns:
+        df["is_active"] = df["is_active"].astype(str).str.upper() == "TRUE"
+    elif "active" in df.columns:
+        df["is_active"] = df["active"].astype(str).str.upper() == "TRUE"
+    else:
+        df["is_active"] = True  # fallback
+
     return df
 
 users_df = load_users()
@@ -46,8 +54,11 @@ users_df = load_users()
 @st.cache_data(ttl=600)
 def load_attendance():
     df = pd.read_csv(ATT_CSV_URL)
+    df.columns = df.columns.str.strip().str.lower()
+
     df["log_date"] = pd.to_datetime(df["log_date"], errors="coerce")
     df["work_hours"] = pd.to_numeric(df["work_hours"], errors="coerce")
+
     return df
 
 # ---------------- LOGIN SCREEN ----------------
@@ -59,7 +70,7 @@ def login_screen():
 
     if st.button("Login"):
         user = users_df[
-            (users_df["email"] == email) &
+            (users_df["email"].str.lower() == email.lower()) &
             (users_df["password"] == password) &
             (users_df["is_active"] == True)
         ]
@@ -78,8 +89,7 @@ def logout_sidebar():
         st.markdown(f"👤 **Role:** {st.session_state.role}")
         st.markdown(f"🆔 **Employee:** {st.session_state.employee_id}")
         if st.button("🚪 Logout"):
-            for k in list(st.session_state.keys()):
-                del st.session_state[k]
+            st.session_state.clear()
             st.experimental_rerun()
 
 # ---------------- ROLE FILTER ----------------
@@ -88,7 +98,7 @@ def apply_role_filter(df):
         return df
     return df[df["empid"] == st.session_state.employee_id]
 
-# ---------------- LOGIN CHECK ----------------
+# ---------------- AUTH GATE ----------------
 if not st.session_state.logged_in:
     login_screen()
     st.stop()
@@ -155,7 +165,7 @@ filtered = filtered[
     (filtered["user_type"].isin(user_type_filter))
 ]
 
-# ---------------- WORK HOUR STATUS ----------------
+# ---------------- WORK HOURS STATUS ----------------
 def work_hour_status(hours):
     if pd.isna(hours):
         return "⚪ NA"
@@ -165,17 +175,17 @@ def work_hour_status(hours):
         return "🟡 Partial"
     return "🔴 Low"
 
-filtered["Work Hours Status"] = filtered["work_hours"].apply(work_hour_status)
+filtered["work hours status"] = filtered["work_hours"].apply(work_hour_status)
 
 # ---------------- DISPLAY FORMAT ----------------
 display_df = filtered.copy()
 display_df["log_date"] = display_df["log_date"].dt.strftime("%Y-%m-%d")
 
-# ---------------- COLUMNS ----------------
+# ---------------- COLUMN ORDER ----------------
 display_columns = [
     "empid", "employee_fname", "employee_lname", "gender",
     "log_date", "user_type", "first_in_time", "last_out_time",
-    "work_hours", "Work Hours Status", "day_status",
+    "work_hours", "work hours status", "day_status",
     "total_in_out", "leave_status"
 ]
 display_columns = [c for c in display_columns if c in display_df.columns]
