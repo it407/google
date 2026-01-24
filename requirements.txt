@@ -7,4 +7,5 @@ plotly
 openpyxl
 xlsxwriter
 pyarrow
+psycopg2-binary
 
