@@ -1,9 +1,8 @@
 import streamlit as st
 import pandas as pd
+import html
 
-st.set_page_config(page_title="AI CCTV Monitoring", layout="wide")
-
-st.title("AI CCTV Monitoring Dashboard")
+st.set_page_config(page_title="AI CCTV Monitoring Dashboard", layout="wide")
 
 GOOGLE_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/18cfgyHMGpoNGLzqGalg7DIu0VFKtIihUh-Nzn2HQDKQ/gviz/tq?tqx=out:csv&sheet=odata"
 
@@ -19,57 +18,11 @@ def load_data():
     return df
 
 
-try:
-    df = load_data()
+def build_html_table(dataframe):
+    if dataframe.empty:
+        return "<p>No records found.</p>"
 
-    st.sidebar.header("Filters")
-
-    section_options = sorted([x for x in df["Section"].dropna().unique() if x != ""])
-    event_options = sorted([x for x in df["Event_Type"].dropna().unique() if x != ""])
-    severity_options = sorted([x for x in df["Severity"].dropna().unique() if x != ""])
-    status_options = sorted([x for x in df["Violation_Status"].dropna().unique() if x != ""])
-
-    selected_sections = st.sidebar.multiselect("Section", section_options, default=section_options)
-    selected_events = st.sidebar.multiselect("Event Type", event_options, default=event_options)
-    selected_severity = st.sidebar.multiselect("Severity", severity_options, default=severity_options)
-    selected_status = st.sidebar.multiselect("Violation Status", status_options, default=status_options)
-
-    search_text = st.sidebar.text_input("Search description / camera")
-
-    filtered_df = df.copy()
-
-    if selected_sections:
-        filtered_df = filtered_df[filtered_df["Section"].isin(selected_sections)]
-
-    if selected_events:
-        filtered_df = filtered_df[filtered_df["Event_Type"].isin(selected_events)]
-
-    if selected_severity:
-        filtered_df = filtered_df[filtered_df["Severity"].isin(selected_severity)]
-
-    if selected_status:
-        filtered_df = filtered_df[filtered_df["Violation_Status"].isin(selected_status)]
-
-    if search_text:
-        filtered_df = filtered_df[
-            filtered_df["Description"].astype(str).str.contains(search_text, case=False, na=False)
-            | filtered_df["Camera_ID"].astype(str).str.contains(search_text, case=False, na=False)
-            | filtered_df["Specific_Violations"].astype(str).str.contains(search_text, case=False, na=False)
-        ]
-
-    filtered_df = filtered_df.reset_index(drop=True)
-    filtered_df.index = filtered_df.index + 1
-
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Total Records", len(filtered_df))
-    col2.metric("Total Violations", (filtered_df["Violation_Status"] == "VIOLATION").sum())
-    col3.metric("Critical", (filtered_df["Severity"] == "CRITICAL").sum())
-    col4.metric("High", (filtered_df["Severity"] == "HIGH").sum())
-
-    st.subheader("Violation Log Table")
-
-    # Show table without Image_URL
-    table_columns = [
+    headers = [
         "Timestamp",
         "Camera_ID",
         "Section",
@@ -77,54 +30,257 @@ try:
         "Severity",
         "Description",
         "Specific_Violations",
-        "Violation_Status"
+        "Violation_Status",
+        "Image_URL"
     ]
 
-    available_columns = [col for col in table_columns if col in filtered_df.columns]
+    available_headers = [col for col in headers if col in dataframe.columns]
 
-    st.dataframe(
-        filtered_df[available_columns],
-        use_container_width=True,
-        hide_index=False,
-        column_config={
-            "Timestamp": st.column_config.DatetimeColumn("Timestamp", format="YYYY-MM-DD HH:mm:ss"),
-            "Camera_ID": st.column_config.TextColumn("Camera ID"),
-            "Section": st.column_config.TextColumn("Section"),
-            "Event_Type": st.column_config.TextColumn("Event Type"),
-            "Severity": st.column_config.TextColumn("Severity"),
-            "Description": st.column_config.TextColumn("Description", width="large"),
-            "Specific_Violations": st.column_config.TextColumn("Specific Violations", width="large"),
-            "Violation_Status": st.column_config.TextColumn("Violation Status"),
-        },
-    )
+    table_html = """
+    <style>
+        .table-wrap {
+            overflow-x: auto;
+            border: 1px solid #e6e6e6;
+            border-radius: 10px;
+            background: white;
+        }
+        table.custom-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+        }
+        table.custom-table thead th {
+            position: sticky;
+            top: 0;
+            background: #f7f7f7;
+            z-index: 1;
+            border-bottom: 1px solid #ddd;
+            padding: 10px;
+            text-align: left;
+            white-space: nowrap;
+        }
+        table.custom-table tbody td {
+            border-bottom: 1px solid #eee;
+            padding: 10px;
+            vertical-align: top;
+        }
+        table.custom-table tbody tr:hover {
+            background: #fafafa;
+        }
+        .severity-critical {
+            color: #b00020;
+            font-weight: 700;
+        }
+        .severity-high {
+            color: #d35400;
+            font-weight: 700;
+        }
+        .severity-medium {
+            color: #9c6b00;
+            font-weight: 700;
+        }
+        .severity-low {
+            color: #1f618d;
+            font-weight: 700;
+        }
+        .severity-none {
+            color: #2e7d32;
+            font-weight: 700;
+        }
+        .status-violation {
+            color: #b00020;
+            font-weight: 700;
+        }
+        .status-no-violation {
+            color: #2e7d32;
+            font-weight: 700;
+        }
+        .open-link {
+            color: #1565c0;
+            text-decoration: none;
+            font-weight: 600;
+        }
+        .open-link:hover {
+            text-decoration: underline;
+        }
+        .small-col {
+            white-space: nowrap;
+        }
+        .desc-col {
+            min-width: 260px;
+        }
+        .viol-col {
+            min-width: 220px;
+        }
+    </style>
+    <div class="table-wrap">
+    <table class="custom-table">
+        <thead>
+            <tr>
+    """
 
-    st.markdown("---")
-    st.subheader("View Image")
+    for col in available_headers:
+        label = "Image" if col == "Image_URL" else col.replace("_", " ")
+        table_html += f"<th>{html.escape(label)}</th>"
 
-    if len(filtered_df) > 0:
-        selected_row = st.selectbox(
-            "Select row number",
-            filtered_df.index.tolist(),
-            format_func=lambda x: f"Row {x} | {filtered_df.loc[x, 'Camera_ID']} | {filtered_df.loc[x, 'Event_Type']}"
-        )
+    table_html += "</tr></thead><tbody>"
 
-        if st.button("View Image"):
-            image_url = filtered_df.loc[selected_row, "Image_URL"] if "Image_URL" in filtered_df.columns else ""
+    for _, row in dataframe.iterrows():
+        table_html += "<tr>"
 
-            if image_url:
-                st.image(image_url, caption=f"Row {selected_row} Image", use_container_width=True)
+        for col in available_headers:
+            val = row[col]
+
+            if col == "Timestamp":
+                if pd.notna(val) and str(val) != "":
+                    try:
+                        val = pd.to_datetime(val).strftime("%Y-%m-%d %H:%M:%S")
+                    except Exception:
+                        val = str(val)
+                else:
+                    val = ""
+
+                table_html += f'<td class="small-col">{html.escape(str(val))}</td>'
+
+            elif col == "Severity":
+                sev = str(val).upper().strip()
+                sev_class = {
+                    "CRITICAL": "severity-critical",
+                    "HIGH": "severity-high",
+                    "MEDIUM": "severity-medium",
+                    "LOW": "severity-low",
+                    "NONE": "severity-none"
+                }.get(sev, "")
+                table_html += f'<td class="small-col {sev_class}">{html.escape(sev)}</td>'
+
+            elif col == "Violation_Status":
+                status = str(val).upper().strip()
+                status_class = {
+                    "VIOLATION": "status-violation",
+                    "NO_VIOLATION": "status-no-violation"
+                }.get(status, "")
+                table_html += f'<td class="small-col {status_class}">{html.escape(status)}</td>'
+
+            elif col == "Description":
+                table_html += f'<td class="desc-col">{html.escape(str(val))}</td>'
+
+            elif col == "Specific_Violations":
+                table_html += f'<td class="viol-col">{html.escape(str(val))}</td>'
+
+            elif col == "Image_URL":
+                url = str(val).strip()
+                if url:
+                    table_html += (
+                        f'<td class="small-col">'
+                        f'<a class="open-link" href="{html.escape(url)}" target="_blank">Open Image</a>'
+                        f'</td>'
+                    )
+                else:
+                    table_html += '<td class="small-col">-</td>'
+
             else:
-                st.warning("No image URL found for this row.")
+                table_html += f'<td class="small-col">{html.escape(str(val))}</td>'
+
+        table_html += "</tr>"
+
+    table_html += """
+        </tbody>
+    </table>
+    </div>
+    """
+
+    return table_html
+
+
+st.title("AI CCTV Monitoring Dashboard")
+
+try:
+    df = load_data()
+
+    st.sidebar.header("Filters")
+
+    if "Section" in df.columns:
+        section_options = sorted([x for x in df["Section"].astype(str).unique() if x != ""])
+        selected_sections = st.sidebar.multiselect("Section", section_options, default=section_options)
     else:
-        st.info("No records found.")
+        selected_sections = []
+
+    if "Event_Type" in df.columns:
+        event_options = sorted([x for x in df["Event_Type"].astype(str).unique() if x != ""])
+        selected_events = st.sidebar.multiselect("Event Type", event_options, default=event_options)
+    else:
+        selected_events = []
+
+    if "Severity" in df.columns:
+        severity_options = sorted([x for x in df["Severity"].astype(str).unique() if x != ""])
+        selected_severity = st.sidebar.multiselect("Severity", severity_options, default=severity_options)
+    else:
+        selected_severity = []
+
+    if "Violation_Status" in df.columns:
+        status_options = sorted([x for x in df["Violation_Status"].astype(str).unique() if x != ""])
+        selected_status = st.sidebar.multiselect("Violation Status", status_options, default=status_options)
+    else:
+        selected_status = []
+
+    search_text = st.sidebar.text_input("Search")
+
+    filtered_df = df.copy()
+
+    if selected_sections and "Section" in filtered_df.columns:
+        filtered_df = filtered_df[filtered_df["Section"].isin(selected_sections)]
+
+    if selected_events and "Event_Type" in filtered_df.columns:
+        filtered_df = filtered_df[filtered_df["Event_Type"].isin(selected_events)]
+
+    if selected_severity and "Severity" in filtered_df.columns:
+        filtered_df = filtered_df[filtered_df["Severity"].isin(selected_severity)]
+
+    if selected_status and "Violation_Status" in filtered_df.columns:
+        filtered_df = filtered_df[filtered_df["Violation_Status"].isin(selected_status)]
+
+    if search_text:
+        mask = pd.Series(False, index=filtered_df.index)
+
+        for col in ["Camera_ID", "Description", "Specific_Violations", "Section", "Event_Type"]:
+            if col in filtered_df.columns:
+                mask = mask | filtered_df[col].astype(str).str.contains(search_text, case=False, na=False)
+
+        filtered_df = filtered_df[mask]
+
+    filtered_df = filtered_df.sort_values(by="Timestamp", ascending=False, na_position="last")
+
+    c1, c2, c3, c4 = st.columns(4)
+
+    total_records = len(filtered_df)
+
+    total_violations = 0
+    if "Violation_Status" in filtered_df.columns:
+        total_violations = (filtered_df["Violation_Status"].astype(str).str.upper() == "VIOLATION").sum()
+
+    critical_count = 0
+    if "Severity" in filtered_df.columns:
+        critical_count = (filtered_df["Severity"].astype(str).str.upper() == "CRITICAL").sum()
+
+    high_count = 0
+    if "Severity" in filtered_df.columns:
+        high_count = (filtered_df["Severity"].astype(str).str.upper() == "HIGH").sum()
+
+    c1.metric("Total Records", total_records)
+    c2.metric("Violations", total_violations)
+    c3.metric("Critical", critical_count)
+    c4.metric("High", high_count)
+
+    st.markdown("### Violation Log")
+    st.markdown(build_html_table(filtered_df), unsafe_allow_html=True)
 
     st.download_button(
         "Download Filtered CSV",
         filtered_df.to_csv(index=False).encode("utf-8"),
         file_name="filtered_violation_log.csv",
-        mime="text/csv",
+        mime="text/csv"
     )
 
 except Exception as e:
-    st.error(f"Error loading Google Sheet data: {e}")
-    st.info("Check your Google Sheet CSV URL and sharing settings.")
+    st.error(f"Error loading data: {e}")
+    st.info("Check the Google Sheet sharing setting and sheet name.")
