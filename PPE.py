@@ -5,7 +5,7 @@ st.set_page_config(page_title="AI CCTV Monitoring", layout="wide")
 
 st.title("AI CCTV Monitoring Dashboard")
 
-GOOGLE_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/18cfgyHMGpoNGLzqGalg7DIu0VFKtIihUh-Nzn2HQDKQ/edit?usp=sharing"
+GOOGLE_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/18cfgyHMGpoNGLzqGalg7DIu0VFKtIihUh-Nzn2HQDKQ/gviz/tq?tqx=out:csv&sheet=odata"
 
 
 @st.cache_data(ttl=60)
