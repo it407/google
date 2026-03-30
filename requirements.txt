@@ -8,4 +8,8 @@ openpyxl
 xlsxwriter
 pyarrow
 psycopg2-binary
-
+streamlit
+pillow
+numpy
+opencv-python-headless
+pyzbar
